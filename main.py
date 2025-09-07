@@ -8,6 +8,9 @@ import ast
 import re
 from collections import Counter
 
+DV_CSV = "daily_values.csv"
+CSV = r"harmful_ingredients_risk_list.csv"
+
 @st.cache_data
 def load_risk_csv(csv_path):
     df = pd.read_csv(csv_path)
@@ -37,17 +40,91 @@ def normalize_token(s: str):
     s = re.sub(r"[^0-9a-zA-Z\-\+\(\) %]", " ", s)  # remove most punctuation, keep () + -
     return re.sub(r"\s+", " ", s).strip().lower()
 
+
+def get_serving(nutriments, key_base, fallback_unit=""):
+    val = nutriments.get(f"{key_base}_serving")
+    unit = nutriments.get(f"{key_base}_unit", fallback_unit)
+    if val is None:
+        return None, unit
+    try:
+        val = round(val, 2)
+    except Exception:
+        pass
+    return val, unit
+
+
+
+
+@st.cache_data
+def load_daily_values(csv_path: str) -> dict:
+    """
+    Reads a CSV with columns: nutrient, Intake (e.g., '25 g', '2000 mg', '2400 kcal')
+    Returns dict: {'calories': (2400.0, 'kcal'), 'total fat': (60.0, 'g'), ...}
+    """
+    df = pd.read_csv(csv_path)
+
+    def parse_intake(s: str):
+        s = str(s).strip().lower()
+        # split number and unit (supports mg, g, µg, mcg, kcal)
+        m = re.match(r"^\s*([0-9]+(?:\.[0-9]+)?)\s*([a-zµ]+)\s*$", s)
+        if not m:
+            return None, ""
+        val = float(m.group(1))
+        unit = m.group(2)
+        # normalize micrograms unit
+        if unit == "mcg":
+            unit = "µg"
+        return val, unit
+
+    dv = {}
+    for _, row in df.iterrows():
+        name = str(row["nutrient"]).strip().lower()
+        val, unit = parse_intake(row["Intake"])
+        if val is not None:
+            dv[name] = (val, unit)
+    return dv
+
+
+def convert_units(value: float, from_unit: str, to_unit: str) -> float:
+    """Convert between g, mg, µg, and kcal (identity if same)."""
+    u = from_unit.lower()
+    v = to_unit.lower()
+    if u == v:
+        return value
+    # mass conversions
+    scale = {
+        ("g", "mg"): 1000.0, ("mg", "g"): 1 / 1000.0,
+        ("g", "µg"): 1_000_000.0, ("µg", "g"): 1 / 1_000_000.0,
+        ("mg", "µg"): 1000.0, ("µg", "mg"): 1 / 1000.0,
+    }
+    if (u, v) in scale:
+        return value * scale[(u, v)]
+    # kcal kept as-is (no conversion with mass)
+    return value  # fallback
+
+
+def pct_dv(value: float, unit: str, dv_value: float, dv_unit: str) -> float:
+    """Return percentage of daily value (0-100+) with unit conversion."""
+    try:
+        val_same_unit = convert_units(value, unit or dv_unit, dv_unit)
+        return (val_same_unit / dv_value) * 100.0
+    except Exception:
+        return None
+
+
 def main():
     st.markdown(
         "<h1 style='text-align: center;'>🥗 Bite Right</h1><br>",
         unsafe_allow_html=True)
 
-    input_col1, input_col2 = st.columns(2)
+    input_col1, input_col2, input_col3 = st.columns(3)
 
     with input_col1:
-        take_pic = st.button("📷 Take a picture", use_container_width=True)
+        take_pic = st.button("📷 Scan barcode", use_container_width=True)
     with input_col2:
-        upload_pic = st.button("📂 Upload photo", use_container_width=True)
+        upload_pic = st.button("📂 Upload barcode", use_container_width=True)
+    with input_col3:
+        manual = st.button("🔍 Type barcode #", use_container_width=True)
 
     # Remember choice in session state
     if "choice" not in st.session_state:
@@ -57,22 +134,40 @@ def main():
         st.session_state.choice = "camera"
     elif upload_pic:
         st.session_state.choice = "upload"
+    elif manual:
+        st.session_state.choice = "manual"
 
-    file = None
+    input = None
 
     # Show input based on choice
     if st.session_state.choice == "camera":
-        file = st.camera_input("")
+        input = st.camera_input("")
     elif st.session_state.choice == "upload":
-        file = st.file_uploader("", type=["png", "jpg", "jpeg"])
+        input = st.file_uploader("", type=["png", "jpg", "jpeg"])
+    elif st.session_state.choice == "manual":
+        input = st.text_input("Enter barcode number")
+        st.info("💡 If your barcode doesn’t work, try adding a leading **0** and re-submit.")
 
-    if file:
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
-            tmp.write(file.getbuffer())
-            tmp_path = tmp.name
+    if input:
 
-        barcode_gtin = decode_barcode_from_image(tmp_path)
-        data = reconcile(barcode_gtin)
+        if st.session_state.choice == "manual":
+            barcode_gtin = str(input)
+
+        else:
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
+                tmp.write(input.getbuffer())
+                tmp_path = tmp.name
+            barcode_gtin = decode_barcode_from_image(tmp_path)
+
+        if barcode_gtin:
+            data = reconcile(barcode_gtin)
+        else:
+            st.error("Couldn't read barcode. Try agian! ")
+            st.stop()
+
+        if data is None:
+            st.error("Data for this product not available on open food facts!")
+            st.stop()
 
         # ---------- images side by side ----------
         st.markdown("""
@@ -103,6 +198,7 @@ def main():
         """, unsafe_allow_html=True)
         brand = data.get('brand') or None
         product = data.get('product_name') or None
+
         if brand or product:
             st.markdown(f"<h3 style='text-align: center;'>✨ {brand or ''} {product or ''} ✨</h3>",
                         unsafe_allow_html=True)
@@ -124,7 +220,6 @@ def main():
                     unsafe_allow_html=True)
 
         # ---------- Ingredients ----------
-        CSV = r"harmful_ingredients_risk_list.csv"
 
         RISK_COLORS = {
             "High": {"bg": "#FEE2E2", "border": "#991B1B", "text": "#991B1B"},  # red-ish
@@ -165,7 +260,7 @@ def main():
 
         ingredients_text = (data.get("ingredients_text") or "").strip()
 
-        tokens_raw = [t.strip() for t in re.split(r"[;,]", ingredients_text) if t.strip()]
+        tokens_raw = [t.strip() for t in re.split(r"[;,()]", ingredients_text) if t.strip()]
         tokens_norm = [normalize_token(t) for t in tokens_raw]
 
         def match_token(token_norm):
@@ -202,41 +297,60 @@ def main():
         for lvl in ["High", "Moderate", "Low", "Unknown"]:
             risk_counts.setdefault(lvl, 0)
 
-        RISK_EMOJIS = {
-            "High": "☠️",
-            "Moderate": "🚨",
-            "Low": "⚠️",
-            "Unknown": "❓"
-        }
-        summary_html = "<div class='pills'>"
-        for lvl in ["High", "Moderate", "Low"]:
-            emoji = RISK_EMOJIS.get(lvl, "")
-            summary_html += f"<span class='pill' data-risk='{lvl}'>{emoji} {lvl} Risk: {risk_counts[lvl]}</span>"
-        summary_html += "</div><br>"
-        st.markdown(summary_html, unsafe_allow_html=True)
+        # Build risky ingredients table (exclude Unknown)
+        rows = [
+            {
+                "Ingredient": item["display"],
+                "Category": item["category"],
+                "Concern": item["concern"],
+                "Risk": item["risk"],
+            }
+            for item in matched
+            if item["risk"] in {"High", "Moderate", "Low"}
+        ]
+
+        if rows:
+            severity_order = {"High": 0, "Moderate": 1, "Low": 2}
+            df_summary = pd.DataFrame(rows)
+            df_summary["__sev"] = df_summary["Risk"].map(severity_order).fillna(99)
+            df_summary = df_summary.sort_values(["__sev", "Ingredient"]).drop(columns="__sev")
+
+            # Color map same as your RISK_COLORS
+            risk_colors = {
+                "High": {"bg": "#FEE2E2", "text": "#991B1B"},
+                "Moderate": {"bg": "#FEF3C7", "text": "#92400E"},
+                "Low": {"bg": "#ECFDF5", "text": "#065F46"},
+            }
+
+            def highlight_risk(val):
+                if val in risk_colors:
+                    return f"background-color: {risk_colors[val]['bg']}; color: {risk_colors[val]['text']}; font-weight:600;"
+                return ""
+
+            st.dataframe(
+                df_summary.style.applymap(highlight_risk, subset=["Risk"]),
+                hide_index=True,
+                use_container_width=True
+            )
+        else:
+            st.info("No ingredients from the risk list (High/Moderate/Low) were found.")
 
         # -------------------------------------------------------------------------------------------------------------
 
         st.markdown("<h3 style='text-align: center;'> ⚡ Macros & Micros ⚡ </h3>",
                     unsafe_allow_html=True)
 
-        def get_serving(nutriments, key_base, fallback_unit=""):
-            val = nutriments.get(f"{key_base}_serving")
-            unit = nutriments.get(f"{key_base}_unit", fallback_unit)
-            if val is None:
-                return None, unit
-            try:
-                val = round(val, 2)
-            except Exception:
-                pass
-            return val, unit
 
-        def tile(label, value, unit="", kind="macro"):
-            klass = "tile-macro" if kind == "macro" else "tile-micro"
-            value_s = "-" if value is None else value
-            unit_s = f" {unit}" if unit and value is not None else ""
-            return f"""<div class="tile {klass}"><div class="tile-label">{label}</div>
-                        <div class="tile-value">{value_s}{unit_s}</div></div>"""
+        daily_values = load_daily_values(DV_CSV)
+
+        # Map OFF keys to DV names in your CSV
+        DV_KEY_MAP = {
+            "energy-kcal": "calories",
+            "fat": "total fat",
+            "saturated-fat": "saturated fat",
+            "sugars": "free sugars",  # using Free Sugars as DV benchmark
+            "sodium": "sodium",
+        }
 
         MACRO_KEYS = {
             "energy-kcal": ("Energy", "kcal"),
@@ -314,6 +428,29 @@ def main():
                     </style>
                     """, unsafe_allow_html=True)
 
+        def tile(label, value, unit="", kind="macro", dv_key_base=None):
+            """
+            dv_key_base: OFF key (e.g., 'sugars', 'fat') to look up a DV entry via DV_KEY_MAP.
+            """
+            klass = "tile-macro" if kind == "macro" else "tile-micro"
+            value_s = "-" if value is None else value
+            unit_s = f" {unit}" if unit and value is not None else ""
+
+            dv_txt = ""
+            if value is not None and dv_key_base in DV_KEY_MAP:
+                dv_name = DV_KEY_MAP[dv_key_base]  # e.g., 'free sugars'
+                dv_entry = daily_values.get(dv_name)  # (25.0, 'g')
+                if dv_entry:
+                    dv_val, dv_unit = dv_entry
+                    pct = pct_dv(value, unit, dv_val, dv_unit)
+                    if pct is not None:
+                        dv_txt = f" ({round(pct):d}% DV)"
+
+            return f"""<div class="tile {klass}">
+                <div class="tile-label">{label}</div>
+                <div class="tile-value">{value_s}{unit_s}{dv_txt}</div>
+            </div>"""
+
         nut = data.get("nutriments", {})
 
         serving = data.get("serving_size", "-")
@@ -326,7 +463,9 @@ def main():
         for key, (label, default_unit) in MACRO_KEYS.items():
             val, unit = get_serving(nut, key, default_unit)
             if val is not None:
-                macro_tiles.append(tile(label, val, unit, kind="macro"))
+                macro_tiles.append(
+                    tile(label, val, unit, kind="macro", dv_key_base=key)
+                )
 
         st.markdown(f"<div class='tiles'>{''.join(macro_tiles) if macro_tiles else '<em>No macro data</em>'} </div>",
                     unsafe_allow_html=True)

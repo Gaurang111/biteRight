@@ -1,9 +1,10 @@
 # 🥗 BiteRight – Food Ingredient Risk & Nutrition Dashboard  
 
+Try it out: [BiteRight](https://biteright-app.streamlit.app/)
+
+
 **BiteRight is my personal project that I use very often** to quickly analyze packaged food products I buy and consume.  
 It’s built in [Streamlit](https://streamlit.io) and designed to be both practical for everyday use
-
-BiteRight is a Streamlit web app that helps you analyze packaged food products.  
 It pulls nutrition and ingredient data (e.g. from OpenFoodFacts), and displays them in a clean, color-coded dashboard highlighting:
 
 - 📦 Serving size  

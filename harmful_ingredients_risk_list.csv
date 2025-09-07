@@ -1,0 +1,21 @@
+Category,Labels,Risk Level,Main Concern
+Trans fats,"['Partially hydrogenated oils', 'Hydrogenated vegetable oil', 'Shortening']",High,"Heart disease, inflammation, no safe level"
+Potassium bromate,['Potassium bromate'],High,"Possible carcinogen, banned in many countries"
+Brominated vegetable oil,['Brominated vegetable oil (BVO)'],High,"Neurological issues, organ damage"
+Red Dye No. 3,"['Erythrosine', 'FD&C Red 3']",High,"Carcinogenic in animals, banned in many places"
+BHA,['BHA (Butylated Hydroxyanisole)'],High,"Possible carcinogen, hormone disruption"
+Propylparaben,['Propylparaben'],High,"Endocrine disruptor, hormonal effects"
+Titanium dioxide,['Titanium dioxide (E171)'],High,"Inflammation, possible carcinogen"
+High-Fructose Corn Syrup,"['HFCS', 'Corn syrup', 'Glucose-fructose syrup']",High,"Obesity, insulin resistance, fatty liver"
+Artificial sweeteners,"['Aspartame', 'Sucralose', 'Saccharin', 'Acesulfame potassium']",High,"Glucose intolerance, gut microbiome disruption"
+Nitrites/Nitrates,"['Sodium nitrite', 'Sodium nitrate', 'Potassium nitrate']",High,Formation of nitrosamines → cancer risk
+Emulsifiers,"['Polysorbate 80', 'Carboxymethyl cellulose (CMC)', 'Mono- & diglycerides']",High,"Gut barrier disruption, chronic inflammation"
+Food dyes (synthetic),"['Red 40', 'Yellow 5', 'Yellow 6', 'Blue 1', 'Blue 2', 'Green 3']",Moderate,"Hyperactivity in kids, possible carcinogens"
+BHT,['BHT (Butylated Hydroxytoluene)'],Moderate,"Hormonal effects, possible carcinogen"
+Benzoates,"['Sodium benzoate', 'Potassium benzoate']",Moderate,"Allergies, can form benzene with vitamin C"
+Sulphites,"['Sulphur dioxide', 'Sodium sulphite', 'Sodium metabisulphite']",Moderate,"Severe reactions in sensitive individuals, especially asthmatics"
+MSG,"['Monosodium glutamate', 'Hydrolyzed vegetable protein', 'Autolyzed yeast extract']",Moderate,"Headaches, sensitivity reactions in some people"
+Refined grains,"['Enriched flour', 'White flour', 'White rice', 'Refined wheat flour']",Low,"Low nutrients, blood sugar spikes"
+GRAS thickeners/stabilizers,"['Guar gum', 'Cellulose gum', 'Xanthan gum']",Low,"Generally safe, occasional digestive upset"
+Saccharin (within ADI),['Saccharin'],Low,Generally safe at regulated levels
+Aspartame (within ADI),['Aspartame'],Low,"Safe for most, unsafe for people with PKU"
